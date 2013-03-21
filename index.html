@@ -1,0 +1,204 @@
+<html>
+	<head>
+		<link rel="stylesheet" type="text/css" href="css/terminator_style.css" />
+		<script src="http://code.createjs.com/easeljs-0.4.1.min.js"></script>
+		<script src="js/signals.js"></script>
+		<script src="js/calendar.js"></script>
+		<script>
+			var canvas;
+
+			var dayImage = new Image();
+			var nightImage = new Image();
+			var mapWidth = 624;
+			var mapHeight = 310;
+			var nightShape = new Shape();
+			var theSun = new Shape();
+			var stage;
+
+			var clock_stage;
+			var calendar_stage;
+			var calendar = new Calendar(new Date());
+
+			var declinationLookup;
+			var monthName = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+			var assetsToLoad = 2;
+			var playState = "none";
+
+			function init() {
+				declinationLookup = generateDeclinationTable();
+				canvas = document.getElementById("map");
+				stage = new Stage(canvas);
+				dayImage.onload = run;
+				nightImage.onload = run;
+				nightImage.src = "img/vectorized_map_night.png"
+				dayImage.src = "img/vectorized_map.png";
+				//set up the UI controls
+				//create calendar
+				createCalendar("calendar");
+				//create clock
+				//createClock("clock");
+
+				//add update listers to UI controls
+				//set controls to now
+				//setSlidersToNow();
+				document.getElementById('daySlider').onchange = dateUpdate;
+				document.getElementById('timeSlider').onchange = dateUpdate;
+			}
+
+			function createCalendar(calendar_id){
+				console.log("adding calendar");
+				calendar_stage = new Stage(document.getElementById(calendar_id));
+				calendar_stage.enableMouseOver();
+				calendar_stage.addChild(calendar);
+				calendar_stage.update();
+				calendar.updated.add(calendarUpdate);
+			}
+
+			function calendarUpdate(){
+				console.log('calendar update');
+				calendar_stage.update();
+			}
+
+			function setSlidersToNow(){
+				var d = new Date();
+				console.log(d);
+				document.getElementById('daySlider').value = d.getDayOfYear();
+				document.getElementById('timeSlider').value = d.getHours()*60 + d.getMinutes();
+			}
+
+			function tick(){
+				
+			}
+
+			function dateUpdate(){
+				date = dayToDate(document.getElementById('daySlider').value);
+				time = minutesToTime(document.getElementById('timeSlider').value);
+				date.setHours(time.hours);
+				date.setMinutes(time.minutes);
+				setDateTime(date);
+			}
+
+			function run(){
+				assetsToLoad --;
+				if(assetsToLoad == 0){
+					console.log("loaded all assets: go!");
+					var map = new Shape();
+					stage.addChild(map);
+					stage.addChild(nightShape);
+					drawTheSun();
+					stage.addChild(theSun);
+
+					var g = nightShape.graphics;
+					map.graphics.beginBitmapFill(dayImage);
+					//map.graphics.beginFill('#ff00ff');
+					map.graphics.drawRect(0, 0, mapWidth, mapHeight);
+					setDateTime(new Date());
+				}
+			}
+			function drawTheSun(){
+				theSun.graphics.beginStroke('#000');
+				theSun.graphics.beginFill('#FFF');
+				theSun.graphics.drawCircle(0,0,10);
+				theSun.graphics.endFill();
+			}
+
+			function generateDeclinationTable(){
+				var table = [];
+				for(var i=0; i<=366; i++){
+					var tau = (2*Math.PI*i)/365;	//day angle
+					var dec = 0.006918 - 0.399912 * Math.cos(tau) + 0.070257 * Math.sin(tau)
+						- 0.006758 * Math.cos(2*tau) + 0.000907 * Math.sin(2*tau)
+						- 0.002697 * Math.cos(2*tau) + 0.001480 * Math.sin(3*tau);
+					table[i] = dec;
+				}
+				return table;
+			}
+
+			function setDateTime(date){
+				document.getElementById('date').innerHTML = monthName[date.getMonth()] + " " + date.getDate();
+				document.getElementById('time').innerHTML = date.getHours() + ":" + date.getMinutes();
+				var hoursFromNoon = (date.getHours() - 12) + date.getMinutes()/60;
+				var tau = hoursFromNoon * 15;	
+				var dec = declinationLookup[date.getDayOfYear()];	
+				drawTerminator(nightShape.graphics, dec, tau);
+			}
+
+			function drawTerminator(g, dec, tau){
+				var K = Math.PI/180.0,
+					tanLat, 
+					arctanLat,
+					y1,y2,
+					longitude,
+					nightCol = '#006',
+					xScale = mapWidth/360,	
+					yScale = mapHeight/180,
+					x0 = 180,	//center of the map
+					y0 = 90;
+				g.clear();
+				g.beginFill(nightCol);
+				g.beginBitmapFill(nightImage);
+				var newX, newY;
+				for(var i=-180; i<=180; i++){
+					longitude = i+tau;
+					tanLat = -Math.cos(longitude*K)/Math.tan(dec);
+					arctanLat = Math.atan(tanLat)/K;
+					y2 = y0 - Math.round(arctanLat);
+					newX = (x0 + i) * xScale;
+					newY = y2 * yScale;
+					g.lineTo(newX, newY);
+				}
+				if(dec>0){
+					g.lineTo(mapWidth,mapHeight);
+					g.lineTo(0,mapHeight);
+				}else{
+					g.lineTo(mapWidth,0);
+					g.lineTo(0,0);
+				}
+
+				g.lineTo(0,newY);
+				g.endFill();
+
+				//move the sun
+				theSun.x = xScale * (x0 - Math.round(tau) - 5);
+				theSun.y = yScale * (y0 - Math.round(dec/K) - 5);
+
+				stage.update();
+			}
+//date utils
+			Date.prototype.getDayOfYear = function(){
+				var firstJan = new Date(this.getFullYear(),0,1);
+				return Math.ceil((this - firstJan)/86400000);
+			}
+
+			function dayToDate(dayOfTheYear){
+				var d = new Date(2012, 0, 1);
+				var ms = d.getTime() + dayOfTheYear * 86400000
+				return new Date(ms);
+			}
+
+			function minutesToTime(minOfTheDay){
+				var h = Math.floor(minOfTheDay/60);
+				var m = minOfTheDay - h*60;
+				return {
+					hours:h,
+					minutes:m
+				};
+			}
+		</script>
+	</head>
+	<body onload="init();">
+		<div> 
+			<canvas id="map" width='625' height='320'>
+			</canvas>
+		</div>
+		<div>
+			<canvas id="calendar" width='625' height='625'></canvas>
+		</div>
+		<div id="controls">
+			Day: <input type="range" value="1" min="0" max="365" step="1" id="daySlider" width='600'/> <span id="date">0</span> <a href="#" id="playYear">play</a><br />
+			Time: <input type="range" value="0" min="0" max="1440" step="1" id="timeSlider" width='600'/> <span id="time">0</span> <a href="#" id="realTime">real time</a>
+		</div>
+		
+		
+	</body>
+</html>

@@ -1,0 +1,52 @@
+<html>
+<head>
+	<title>
+		where is the sun up?
+	</title>
+<script src="/js/core/require/require.js" type="text/javascript" charset="utf-8"></script>
+<script type="text/javascript" charset="utf-8">
+		require(['js/dateutils','js/signals','js/daynightmap','js/calendar','http://code.createjs.com/easeljs-0.4.1.min.js'], 
+			function(dateUtils, signals, dayNightMap, calendar){
+				
+				//'globals'
+				var daymap = new Image();
+				var nightmap = new Image();
+				
+				var stage = new Stage(document.getElementById("map"));
+				
+				//setup
+				var assetsToLoad = 2;
+				daymap.onload = assetLoaded;
+				nightmap.onload = assetLoaded;
+				nightmap.src = "img/vectorized_map_night.png"
+				daymap.src = "img/vectorized_map.png";	
+
+				function assetLoaded(){
+					assetsToLoad --;
+					if(assetsToLoad == 0){
+						console.log("go");
+						var myMap = dayNightMap.map(daymap, nightmap, new Date(2012,3,23,12));
+						myMap.updated.add(graphicsUpdated);
+						stage.addChild(myMap.view);
+						myMap.setDateTime(new Date(2012,3,23,23))
+					}
+				}
+
+				function graphicsUpdated(){
+					stage.update();
+				}
+			}
+		);
+</script>
+</head>
+<body>
+		<div> 
+			<canvas id="map" width='624' height='320'>
+			</canvas>
+		</div>
+		<div>
+			<canvas id="calendar" width='624' height='320'>
+			</canvas>
+		</div>
+	</body>
+</html>
